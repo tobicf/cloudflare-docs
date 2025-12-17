@@ -132,6 +132,50 @@ Logging configuration is read when your Worker starts and cannot be changed at r
 
 Use `debug` + `pretty` for local development. Use `info` or `warn` + `json` for production (structured logging).
 
+### transport
+
+**Type**: `'http' | 'websocket'`
+**Default**: `'http'`
+
+Control plane transport protocol for SDK-container communication. WebSocket mode multiplexes all SDK operations over a single persistent connection, reducing sub-request count when running inside Workers or Durable Objects.
+
+<TypeScriptExample>
+```ts
+// Enable WebSocket transport to reduce sub-requests
+const sandbox = getSandbox(env.Sandbox, 'user-123', {
+  transport: 'websocket'
+});
+
+// All operations now multiplex over a single WebSocket connection
+await sandbox.exec('python script.py');
+await sandbox.writeFile('/app/data.json', '{"key": "value"}');
+await sandbox.readFile('/app/output.txt');
+```
+</TypeScriptExample>
+
+**When to use WebSocket transport**:
+
+- **Workers calling sandboxes** - When your Worker makes multiple sandbox operations per request
+- **Durable Objects** - When your DO makes frequent sandbox calls
+- **Sub-request limits** - To stay within Worker/DO sub-request quotas
+- **High-frequency operations** - Applications with many file/command operations per execution
+
+**HTTP vs WebSocket comparison**:
+
+| Transport | Use case | Connection model | Sub-request count |
+|-----------|----------|------------------|-------------------|
+| `http` (default) | Simple, occasional sandbox operations | Individual HTTP request per operation | 1 per operation |
+| `websocket` | High-frequency operations in Workers/DOs | Single persistent connection | 1 for all operations |
+
+**Environment variable override**:
+- `SANDBOX_TRANSPORT` - Set to `websocket` to enable WebSocket transport globally
+
+Precedence: `options.transport` > `SANDBOX_TRANSPORT` env var > `'http'` (default)
+
+:::note[Connection establishment]
+The WebSocket connection is established lazily on the first SDK operation. Subsequent operations reuse the same connection until the sandbox sleeps or is destroyed.
+:::
+
 ### normalizeId
 
 **Type**: `boolean`
@@ -197,6 +241,17 @@ Use `keepAlive: true` for:
 - **Interactive sessions** - User-driven workflows where the container should remain available
 
 With `keepAlive`, containers never sleep automatically - use for scenarios where you control the lifecycle explicitly.
+
+## When to use transport
+
+The default HTTP transport works well for most use cases. Use WebSocket transport when:
+
+- **Running inside Workers** - Your Worker makes multiple sandbox operations per request and needs to stay within sub-request limits
+- **Running inside Durable Objects** - Your DO makes frequent sandbox calls and sub-request count matters
+- **High operation frequency** - Your application performs many file reads/writes, command executions, or other SDK operations in quick succession
+- **Cost optimization** - Reducing sub-request count can lower costs for high-volume applications
+
+**Default to HTTP unless sub-requests are a concern**. HTTP transport has simpler error handling and is easier to debug. Only switch to WebSocket when you need to reduce sub-request count.
 
 ## Related resources
 

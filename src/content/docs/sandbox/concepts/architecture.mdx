@@ -26,7 +26,7 @@ flowchart TB
         DO["Sandbox Durable Object routes requests & maintains state"]
         Container["Isolated Ubuntu container executes untrusted code safely"]
 
-        DO -->|HTTP API| Container
+        DO -->|HTTP or WebSocket| Container
     end
 
     Worker -->|RPC call via the Durable Object stub returned by `getSandbox`| DO
@@ -91,10 +91,27 @@ When you execute a command:
 await sandbox.exec("python script.py");
 ```
 
-1. **Client SDK** validates parameters and sends HTTP request to Durable Object
-2. **Durable Object** authenticates and routes to container runtime
+1. **Client SDK** validates parameters and sends request to Durable Object via RPC
+2. **Durable Object** authenticates and routes to container runtime via HTTP or WebSocket
 3. **Container Runtime** validates inputs, executes command, captures output
 4. **Response flows back** through all layers with proper error transformation
+
+### Transport modes
+
+The Durable Object communicates with the container using one of two transport modes:
+
+- **HTTP (default)** - Each SDK operation (file read, command execution, etc.) is a separate HTTP request to the container. Simple and reliable.
+- **WebSocket** - All SDK operations multiplex over a single persistent WebSocket connection. Reduces sub-request count when running inside Workers or Durable Objects.
+
+Configure the transport mode using the `transport` option:
+
+```typescript
+const sandbox = getSandbox(env.Sandbox, "my-sandbox", {
+  transport: 'websocket'  // Multiplex over single connection
+});
+```
+
+Refer to [Sandbox options](/sandbox/configuration/sandbox-options/#transport) for details on when to use each transport mode.
 
 ## Related resources
 
